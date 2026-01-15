@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- BANCO DISTRIBUÍDO (3 Nós) ---
   mongo1:
     image: mongo:latest
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
@@ -21,22 +20,21 @@ services:
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
     ports: ["27019:27017"]
 
-  # Inicializador do Cluster (Roda uma vez e morre)
   mongo-init:
     image: mongo:latest
-    depends_on: [mongo1, mongo2, mongo3]
+    depends_on:
+      mongo1:
+        condition: service_healthy
     command: >
       bash -c "sleep 5 && mongosh --host mongo1:27017 --eval 
       'try { rs.status().ok } catch { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo1:27017\"}, {_id: 1, host: \"mongo2:27017\"}, {_id: 2, host: \"mongo3:27017\"}]}) }'"
 
-  # --- BROKER MQTT ---
   mosquitto:
     image: eclipse-mosquitto
     ports: ["1883:1883", "9001:9001"]
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
 
-  # --- SSACP (AGREGADORES - 3 Instâncias) ---
   ssacp:
     build: ./ssacp
     expose: ["50051"]
@@ -48,7 +46,6 @@ services:
       resources:
         limits: { cpus: '0.2', memory: 128M }
 
-  # --- ISCCP (SENSORES - 15 Instâncias) ---
   isccp:
     build: ./isccp
     depends_on: [mosquitto, ssacp]
@@ -58,9 +55,8 @@ services:
     deploy:
       replicas: 15
       resources:
-        limits: { cpus: '0.1', memory: 64M }
+        limits: { cpus: '0.1', memory: 80M }
 
-  # --- CARROS (CLIENTES - 24 Instâncias) ---
   car:
     build: ./car
     depends_on: [mosquitto]
@@ -69,9 +65,8 @@ services:
     deploy:
       replicas: 24
       resources:
-        limits: { cpus: '0.1', memory: 64M }
+        limits: { cpus: '0.15', memory: 100M }
 
-  # --- DASHBOARD (1 Instância) ---
   ssvcp:
     build: ./ssvcp
     ports: ["5000:5000"]

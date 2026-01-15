@@ -3,10 +3,8 @@ import json
 import random
 import os
 import socket
-import zlib
 import paho.mqtt.client as mqtt
 
-# --- CONFIGURAÇÕES ---
 BROKER = os.getenv("BROKER_ADDRESS", "mosquitto")
 TOPIC = "f1/pneus"
 
@@ -37,27 +35,35 @@ GRID = [
     {"num": 97, "nome": "Safety Car B", "equipe": "FIA"},
 ]
 
-TRACK = ["S do Senna", "Reta Oposta", "Descida do Lago", "Ferradura", "Laranjinha", "Pinheirinho", "Bico de Pato",
-         "Mergulho", "Junção", "Subida Boxes", "Reta Principal"]
+# Ordem Lógica da Pista
+TRACK = [
+    "Reta Principal", "S do Senna", "Saída S", "Reta Oposta",
+    "Descida do Lago", "Ferradura", "Laranjinha", "Pinheirinho",
+    "Bico de Pato", "Mergulho", "Junção", "Subida Boxes"
+]
 
 
-# --- IDENTIDADE DO CONTAINER ---
-def get_my_identity():
-    # O Docker gera hostnames tipo "f1-project_car_5" ou hash aleatório "a1b2c3d4"
-    hostname = socket.gethostname()
-    # Usamos CRC32 para transformar a string num número e pegamos o resto da divisão por 24
-    # Isso distribui os containers pelo grid. Pode haver repetição (colisão), mas é raro.
-    idx = zlib.crc32(hostname.encode()) % len(GRID)
-    return GRID[idx]
+def get_identity():
+    try:
+        # Pega o IP do container (ex: 172.18.0.5)
+        ip = socket.gethostbyname(socket.gethostname())
+        # Pega o último número (5)
+        last_octet = int(ip.split('.')[-1])
+        # Garante unicidade usando o IP como índice
+        # Subtraímos um offset (geralmente .2 é o primeiro container) para alinhar com o array
+        idx = (last_octet) % len(GRID)
+        return GRID[idx]
+    except:
+        return random.choice(GRID)
 
 
-MEU_CARRO = get_my_identity()
-CAR_ID = f"{MEU_CARRO['equipe']}-{MEU_CARRO['nome']}"
-CAR_NUM = MEU_CARRO['num']
+MEU_DADO = get_identity()
+CAR_ID = f"{MEU_DADO['equipe']}-{MEU_DADO['nome']}"
+CAR_NUM = MEU_DADO['num']
 
-print(f" SOU O CARRO: {CAR_ID} (#{CAR_NUM}) - Hostname: {socket.gethostname()}")
+print(f"CARRO INICIADO: {CAR_ID} (#{CAR_NUM}) | IP: {socket.gethostbyname(socket.gethostname())}")
 
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"Car_{CAR_NUM}_{socket.gethostname()}")
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"Car_{socket.gethostname()}")
 
 while True:
     try:
@@ -68,13 +74,23 @@ while True:
 
 client.loop_start()
 
-idx_pista = random.randint(0, len(TRACK) - 1)  # Começa em lugar aleatório
-volta = 1
+# --- FÍSICA CORRIGIDA ---
+# Todos começam no GRID (Index 0 = Reta Principal)
+idx_pista = 0
+volta = 0
+
+# Pequeno delay inicial baseado no número do carro para eles não largarem EXATAMENTE juntos
+# Isso cria um efeito de fila indiana na largada
+time.sleep(MEU_DADO['num'] * 0.1)
 
 while True:
     sensor = TRACK[idx_pista]
-    vel = random.randint(120, 330)
-    if any(c in sensor for c in ["S do Senna", "Laranjinha", "Junção"]): vel = random.randint(80, 160)
+
+    # Velocidade variável
+    vel = random.randint(200, 330)
+    # Curvas lentas
+    if sensor in ["S do Senna", "Laranjinha", "Bico de Pato", "Junção"]:
+        vel = random.randint(80, 140)
 
     payload = {
         "carro_id": CAR_ID,
@@ -84,16 +100,23 @@ while True:
         "velocidade": vel,
         "timestamp": time.time(),
         "pneus": {
-            "fl": {"desgaste": random.uniform(0, 100), "temperatura": random.uniform(80, 120)},
-            "fr": {"desgaste": random.uniform(0, 100), "temperatura": random.uniform(80, 120)},
-            "rl": {"desgaste": random.uniform(0, 100), "temperatura": random.uniform(80, 120)},
-            "rr": {"desgaste": random.uniform(0, 100), "temperatura": random.uniform(80, 120)}
+            "fl": {"desgaste": random.uniform(0, 10), "temperatura": random.uniform(90, 100)},
+            "fr": {"desgaste": random.uniform(0, 10), "temperatura": random.uniform(90, 100)},
+            "rl": {"desgaste": random.uniform(0, 10), "temperatura": random.uniform(90, 100)},
+            "rr": {"desgaste": random.uniform(0, 10), "temperatura": random.uniform(90, 100)}
         }
     }
 
     client.publish(TOPIC, json.dumps(payload))
 
-    idx_pista = (idx_pista + 1) % len(TRACK)
-    if idx_pista == 0: volta += 1
+    # LÓGICA DE MOVIMENTO LINEAR
+    idx_pista += 1
+    if idx_pista >= len(TRACK):
+        idx_pista = 0
+        volta += 1
 
-    time.sleep(random.uniform(1.0, 3.0))  # Delay pra não floodar
+    # O tempo de espera simula o tempo gasto no setor.
+    # Se for muito rápido (< 1s), o dashboard pode pular sensores visualmente (sampling).
+    # Vamos manter entre 1.5s e 2.5s para dar tempo de ver no mapa.
+    delay = random.uniform(1.5, 2.5)
+    time.sleep(delay)

@@ -3,357 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TELEMETRIA F1 - DASHBOARD COMPLETO</title>
-
+    <title>F1 MONITOR - SISTEMA DISTRIBUÍDO</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
-
     <style>
-        /* --- ESTILO GERAL --- */
-        body {
-            background-color: #0b0e11;
-            color: #c9d1d9;
-            font-family: 'Roboto Mono', monospace;
-            overflow: hidden; /* A tela inteira não rola, só os painéis internos */
-            height: 100vh;
-            margin: 0;
+        body { background-color: #0b0e11; color: #c9d1d9; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; margin: 0; }
+
+        /* Layout Grid */
+        .dashboard-container { display: grid; grid-template-columns: 1fr 500px; grid-template-rows: 60px 1fr; height: 100vh; gap: 10px; padding: 10px; }
+
+        /* Topo */
+        .top-bar { grid-column: 1 / -1; background: #161b22; border-bottom: 2px solid #e10600; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+
+        /* Mapa */
+        .map-panel { background: #161b22; border: 1px solid #30363d; position: relative; display: flex; justify-content: center; align-items: center; }
+
+        /* Tabela */
+        .data-panel { background: #161b22; border: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+        .scroll-area { flex: 1; overflow-y: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        thead th { background: #21262d; position: sticky; top: 0; padding: 10px; text-align: left; border-bottom: 2px solid #30363d; z-index: 10; }
+        tbody td { padding: 6px 10px; border-bottom: 1px solid #30363d; vertical-align: middle; }
+
+        /* Estilo dos Sensores no Mapa */
+        .sensor-point { fill: #ffffff; stroke: #000; stroke-width: 1px; }
+        .sensor-text { fill: #8b949e; font-size: 9px; font-weight: bold; font-family: Arial, sans-serif; pointer-events: none; }
+
+        /* Grid de Pneus na Tabela */
+        .tire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 40px; }
+        .tire-box {
+            width: 18px; height: 18px; border-radius: 2px; border: 1px solid #000;
+            cursor: help; transition: background-color 0.3s;
         }
 
-        /* Layout Principal */
-        .dashboard-container {
-            display: grid;
-            grid-template-columns: 1fr 500px; /* Mapa flexível, Tabela fixa */
-            grid-template-rows: 60px 1fr; /* Header fixo, Conteúdo flexível */
-            height: 100vh;
-            gap: 15px;
-            padding: 15px;
-            box-sizing: border-box;
-        }
+        /* Cores de Status */
+        .status-ok { background-color: #238636; } /* Verde */
+        .status-warn { background-color: #d29922; } /* Amarelo */
+        .status-crit { background-color: #da3633; animation: blink 1s infinite; } /* Vermelho */
 
-        /* --- HEADER --- */
-        .top-bar {
-            grid-column: 1 / -1;
-            background: #161b22;
-            border-bottom: 3px solid #e10600;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 25px;
-        }
-
-        /* --- PAINEL DO MAPA --- */
-        .map-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        svg#track-map {
-            width: 95%;
-            height: 95%;
-        }
-
-        .track-path { fill: none; stroke: #21262d; stroke-width: 28; stroke-linecap: round; stroke-linejoin: round; }
-        .track-border { fill: none; stroke: #8b949e; stroke-width: 1; opacity: 0.5; }
-        .sensor-point { fill: #30363d; r: 6; }
-        .sensor-text { fill: #8b949e; font-size: 11px; font-family: Arial, sans-serif; text-anchor: middle; font-weight: bold; opacity: 0.7; }
-
-        /* Marcadores (Bolinhas dos Carros) */
-        .car-marker { transition: transform 0.8s linear; cursor: pointer; } /* Movimento fluido */
-        .car-dot { r: 9; stroke: #f0f6fc; stroke-width: 2px; }
-        .car-label { fill: #ffffff; font-size: 11px; font-weight: bold; text-anchor: middle; transform: translateY(-14px); text-shadow: 0 2px 4px #000; }
-
-        /* --- PAINEL DE DADOS (TABELA) --- */
-        .data-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden; /* Importante para o scroll funcionar dentro */
-            min-height: 0; /* Correção para Firefox/Flexbox */
-        }
-
-        .panel-header {
-            padding: 12px 20px;
-            background: #21262d;
-            font-weight: bold;
-            border-bottom: 1px solid #30363d;
-            color: #e10600;
-            flex-shrink: 0; /* O header não encolhe */
-        }
-
-        .scroll-area {
-            flex-grow: 1; /* Ocupa todo o espaço restante */
-            overflow-y: auto; /* CRÍTICO: Barra de rolagem apenas aqui */
-        }
-
-        .telemetry-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        .telemetry-table th { text-align: left; padding: 10px; color: #8b949e; border-bottom: 1px solid #30363d; background: #161b22; position: sticky; top: 0; z-index: 10; }
-        .telemetry-table td { padding: 8px 10px; border-bottom: 1px solid #21262d; vertical-align: middle; }
-        .telemetry-table tr:hover { background-color: #21262d; }
-
-        /* Pneus */
-        .tire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 36px; padding: 2px; background: #0d1117; border-radius: 4px; border: 1px solid #30363d; }
-        .tire-dot { width: 14px; height: 14px; border-radius: 2px; background-color: #30363d; transition: background-color 0.3s; }
-        .status-ok { background-color: #238636; }
-        .status-warn { background-color: #d29922; }
-        .status-crit { background-color: #da3633; animation: blink 0.5s infinite alternate; }
-        @keyframes blink { to { opacity: 0.5; } }
-
-        /* Scrollbar Personalizada */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0d1117; }
-        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
 <div class="dashboard-container">
     <div class="top-bar">
-        <div class="d-flex align-items-center gap-3">
-            <h4 class="m-0 fw-bold">
-                <span style="color:#e10600;">///</span> F1 MONITOR <span class="badge bg-dark border border-secondary text-secondary ms-2" style="font-size: 0.5em;">LIVE</span>
-            </h4>
-        </div>
-        <div>
-            <span id="car-count" class="text-white me-3" style="font-size: 0.8em;">0 CARROS</span>
-            <span id="conn-status" class="text-warning fw-bold" style="font-size: 0.9em;">CONECTANDO...</span>
-        </div>
+        <h4><span style="color:#e10600;">///</span> F1 MONITOR <span class="badge bg-secondary" style="font-size: 0.5em">OFFICIAL TIMING</span></h4>
+        <div id="status" class="fw-bold text-warning">CONECTANDO...</div>
     </div>
 
     <div class="map-panel">
-        <svg id="track-map" viewBox="0 0 800 600">
-            <path class="track-path" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
-            <path class="track-border" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
+        <svg id="track-map" viewBox="0 0 800 600" style="width:95%; height:95%;">
+            <path fill="none" stroke="#21262d" stroke-width="40" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
+            <path fill="none" stroke="#444" stroke-width="2" stroke-dasharray="5,5" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
 
-            <circle id="s-1" cx="150" cy="450" class="sensor-point" opacity="0.2"/> <circle id="s-2" cx="100" cy="350" class="sensor-point" opacity="0.2"/> <circle id="s-3" cx="200" cy="220" class="sensor-point" opacity="0.2"/> <circle id="s-4" cx="300" cy="150" class="sensor-point" opacity="0.2"/> <circle id="s-5" cx="380" cy="180" class="sensor-point" opacity="0.2"/> <circle id="s-6" cx="390" cy="120" class="sensor-point" opacity="0.2"/> <circle id="s-7" cx="450" cy="60" class="sensor-point" opacity="0.2"/> <circle id="s-8" cx="550" cy="60" class="sensor-point" opacity="0.2"/> <circle id="s-9" cx="650" cy="60" class="sensor-point" opacity="0.2"/> <circle id="s-10" cx="700" cy="150" class="sensor-point" opacity="0.2"/> <circle id="s-11" cx="650" cy="200" class="sensor-point" opacity="0.2"/> <circle id="s-12" cx="680" cy="260" class="sensor-point" opacity="0.2"/> <circle id="s-13" cx="720" cy="300" class="sensor-point" opacity="0.2"/> <circle id="s-14" cx="600" cy="380" class="sensor-point" opacity="0.2"/> <circle id="s-15" cx="450" cy="380" class="sensor-point" opacity="0.2"/> <g id="cars-layer"></g>
+            <g id="sensors-layer">
+                <g transform="translate(150, 450)"><circle r="4" class="sensor-point"/><text x="-10" y="15" class="sensor-text">S Senna</text></g>
+                <g transform="translate(100, 350)"><circle r="4" class="sensor-point"/><text x="-25" y="0" class="sensor-text">Saída S</text></g>
+                <g transform="translate(300, 150)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Reta Oposta</text></g>
+                <g transform="translate(380, 180)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Descida</text></g>
+                <g transform="translate(390, 120)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Ferradura</text></g>
+                <g transform="translate(450, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Laranjinha</text></g>
+                <g transform="translate(550, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Pinheirinho</text></g>
+                <g transform="translate(650, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Bico Pato</text></g>
+                <g transform="translate(700, 150)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Mergulho</text></g>
+                <g transform="translate(650, 200)"><circle r="4" class="sensor-point"/><text x="-30" y="5" class="sensor-text">Junção</text></g>
+                <g transform="translate(680, 260)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Subida</text></g>
+                <g transform="translate(450, 380)"><circle r="4" class="sensor-point"/><text x="-10" y="15" class="sensor-text">Reta Principal</text></g>
+            </g>
+
+            <g id="cars-layer"></g>
         </svg>
     </div>
 
     <div class="data-panel">
-        <div class="panel-header">
-            <span>Tempo Real (Leaderboard)</span>
+        <div class="p-2 fw-bold border-bottom border-secondary text-white d-flex justify-content-between">
+            <span>LEADERBOARD</span>
+            <span style="font-size:0.8em; color:#888;">(Passe o mouse nos pneus para ver dados)</span>
         </div>
         <div class="scroll-area">
-            <table class="telemetry-table">
+            <table>
                 <thead>
-                <tr>
-                    <th width="35%">PILOTO</th>
-                    <th width="10%">VOL</th>
-                    <th width="15%">VEL</th>
-                    <th width="25%">POSIÇÃO</th>
-                    <th width="15%" class="text-center">PNEUS</th>
-                </tr>
+                    <tr>
+                        <th width="5%">#</th> <th width="35%">PILOTO</th>
+                        <th width="25%">SENSOR</th>
+                        <th width="15%">VEL</th>
+                        <th width="20%" class="text-center">PNEUS</th> </tr>
                 </thead>
-                <tbody id="leaderboard-body">
-                    </tbody>
+                <tbody id="table-body"></tbody>
             </table>
         </div>
     </div>
 </div>
 
 <script>
-    // --- MAPA DE SENSORES (Mapeamento Flexível) ---
-    const SENSOR_MAP = {
-        "S do Senna (Entrada)": "s-1", "S do Senna": "s-1", "sensor_1": "s-1",
-        "S do Senna (Saída)": "s-2", "Saída S": "s-2", "sensor_2": "s-2",
-        "Curva do Sol": "s-3", "Sol": "s-3", "sensor_3": "s-3",
-        "Reta Oposta": "s-4", "sensor_4": "s-4",
-        "Descida do Lago": "s-5", "Descida": "s-5", "sensor_5": "s-5",
-        "Ferradura": "s-6", "sensor_6": "s-6",
-        "Laranjinha": "s-7", "sensor_7": "s-7",
-        "Pinheirinho": "s-8", "sensor_8": "s-8",
-        "Bico de Pato": "s-9", "sensor_9": "s-9",
-        "Mergulho": "s-10", "sensor_10": "s-10",
-        "Junção": "s-11", "sensor_11": "s-11",
-        "Subida dos Boxes": "s-12", "Subida": "s-12", "sensor_12": "s-12",
-        "Arquibancadas A": "s-13", "Arq A": "s-13", "sensor_13": "s-13",
-        "Arquibancadas B": "s-14", "Arq B": "s-14", "sensor_14": "s-14",
-        "Reta Principal": "s-15", "Principal": "s-15", "sensor_15": "s-15"
+    // Configurações
+    const SENSOR_COORDS = {
+        "S do Senna": {x: 150, y: 450}, "Saída S": {x: 100, y: 350},
+        "Reta Oposta": {x: 300, y: 150}, "Descida do Lago": {x: 380, y: 180},
+        "Ferradura": {x: 390, y: 120}, "Laranjinha": {x: 450, y: 60},
+        "Pinheirinho": {x: 550, y: 60}, "Bico de Pato": {x: 650, y: 60},
+        "Mergulho": {x: 700, y: 150}, "Junção": {x: 650, y: 200},
+        "Subida Boxes": {x: 680, y: 260}, "Reta Principal": {x: 450, y: 380}
     };
 
-    // --- UTILITÁRIOS VISUAIS ---
-    function getTeamColor(name) {
-        if (!name) return '#ffffff';
-        name = name.toString();
-        if (name.includes('RedBull')) return '#3671C6';
-        if (name.includes('Ferrari')) return '#F91536';
-        if (name.includes('Mercedes')) return '#6CD3BF';
-        if (name.includes('McLaren')) return '#F58020';
-        if (name.includes('Aston')) return '#229971';
-        if (name.includes('Alpine')) return '#0093CC';
-        if (name.includes('Williams')) return '#64C4FF';
-        if (name.includes('RB')) return '#6692FF';
-        if (name.includes('Sauber')) return '#52E252';
-        if (name.includes('Haas')) return '#B6BABD';
-        return '#8b949e';
+    function getColor(team) {
+        if(team.includes("Red")) return "#3671C6";
+        if(team.includes("Ferr")) return "#F91536";
+        if(team.includes("Merc")) return "#6CD3BF";
+        if(team.includes("McL")) return "#F58020";
+        if(team.includes("Ast")) return "#229971";
+        if(team.includes("Alp")) return "#0093CC";
+        if(team.includes("Will")) return "#64C4FF";
+        if(team.includes("RB")) return "#6692FF";
+        if(team.includes("Sau")) return "#52E252";
+        if(team.includes("Haas")) return "#B6BABD";
+        return "#fff";
     }
 
-    function getTireClass(pneu) {
-        if (!pneu) return 'status-ok';
-        const d = pneu.desgaste || 0;
-        const t = pneu.temperatura || 0;
-        if (d > 85 || t > 125) return 'status-crit';
-        if (d > 50 || t > 115 || t < 70) return 'status-warn';
-        return 'status-ok';
+    // Lógica de Cor do Pneu
+    function getTireStatus(tire) {
+        if (!tire) return 'status-ok';
+        const t = tire.temperatura || 0;
+        const d = tire.desgaste || 0;
+
+        // Critérios (Exemplo)
+        if (t > 115 || d > 80) return 'status-crit'; // Vermelho
+        if (t > 105 || d > 50) return 'status-warn'; // Amarelo
+        return 'status-ok'; // Verde
     }
 
-    // --- NORMALIZAÇÃO DE DADOS (O Segredo para funcionar) ---
-    function normalizarCarro(d) {
-        return {
-            // Aceita car_id, driver_number, carro_id...
-            id: d.car_id || d.carro_id || d.driver_number || "Desconhecido",
-            // Aceita speed, velocidade
-            velocidade: d.speed || d.velocidade || 0,
-            // Aceita lap, volta
-            volta: d.lap || d.volta || 0,
-            // Aceita sensor_id, sensor_responsavel
-            sensor: d.sensor_id || d.sensor_responsavel || d.sensor || "Reta Principal",
-            // Aceita tyres, pneus
-            pneus: d.tyres || d.pneus || {fl:{}, fr:{}, rl:{}, rr:{}}
-        };
-    }
-
-    // --- LÓGICA PRINCIPAL ---
-    async function updateTelemetry() {
+    async function update() {
         try {
-            const response = await fetch('/api/telemetria');
-            if (!response.ok) throw new Error("Erro HTTP");
-            const rawData = await response.json();
+            const res = await fetch('/api/telemetria');
+            if (!res.ok) throw new Error("Erro API");
+            const data = await res.json();
 
-            // Atualiza contadores e status
-            document.getElementById('conn-status').innerHTML = '<span class="text-success">● ONLINE</span>';
-            document.getElementById('car-count').innerText = rawData.length + " CARROS";
+            document.getElementById('status').innerText = data.length + " CARROS - LIVE";
+            document.getElementById('status').className = "fw-bold text-success";
 
-            // Processa a lista
-            const cars = {};
-            rawData.forEach((item, idx) => {
-                const car = normalizarCarro(item);
+            const layer = document.getElementById('cars-layer');
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
 
-                // Se o ID vier vazio, gera um temporário para não perder o dado
-                if (car.id === "Desconhecido") {
-                    car.id = "Carro_" + idx;
+            data.forEach(d => {
+                const id = d.carro_id || "Desconhecido";
+                const num = d.numero || "?";
+                const sensor = d.sensor_responsavel || "Reta Principal";
+                const teamColor = getColor(id);
+                const pneus = d.pneus || {};
+
+                // Renderiza Tabela com PNEUS
+                const pneuCell = `
+                    <div class="tire-grid mx-auto">
+                        <div class="tire-box ${getTireStatus(pneus.fl)}" title="FL | Temp: ${pneus.fl?.temperatura?.toFixed(1)}°C | Desg: ${pneus.fl?.desgaste?.toFixed(1)}%"></div>
+                        <div class="tire-box ${getTireStatus(pneus.fr)}" title="FR | Temp: ${pneus.fr?.temperatura?.toFixed(1)}°C | Desg: ${pneus.fr?.desgaste?.toFixed(1)}%"></div>
+                        <div class="tire-box ${getTireStatus(pneus.rl)}" title="RL | Temp: ${pneus.rl?.temperatura?.toFixed(1)}°C | Desg: ${pneus.rl?.desgaste?.toFixed(1)}%"></div>
+                        <div class="tire-box ${getTireStatus(pneus.rr)}" title="RR | Temp: ${pneus.rr?.temperatura?.toFixed(1)}°C | Desg: ${pneus.rr?.desgaste?.toFixed(1)}%"></div>
+                    </div>
+                `;
+
+                tbody.innerHTML += `<tr>
+                    <td class="fw-bold text-white text-center">${num}</td>
+                    <td style="color:${teamColor}; border-left: 3px solid ${teamColor}">${id}</td>
+                    <td style="font-size: 0.8em; color: #aaa;">${sensor}</td>
+                    <td>${d.velocidade}</td>
+                    <td>${pneuCell}</td>
+                </tr>`;
+
+                // Renderiza Mapa
+                // Tenta achar coordenadas (Exata ou Parcial)
+                let coords = SENSOR_COORDS[sensor];
+                if (!coords) {
+                    const key = Object.keys(SENSOR_COORDS).find(k => sensor.includes(k));
+                    if (key) coords = SENSOR_COORDS[key];
                 }
 
-                cars[car.id] = car;
+                if (coords) {
+                    const markerId = 'marker-' + num;
+                    let marker = document.getElementById(markerId);
+
+                    if (!marker) {
+                        marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                        marker.setAttribute("id", markerId);
+
+                        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                        circle.setAttribute("r", "8");
+                        circle.setAttribute("fill", teamColor);
+                        circle.setAttribute("stroke", "#fff");
+                        circle.setAttribute("stroke-width", "1");
+
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("y", "3");
+                        text.setAttribute("text-anchor", "middle");
+                        text.setAttribute("fill", "#000");
+                        text.setAttribute("font-size", "9");
+                        text.setAttribute("font-weight", "bold");
+                        text.textContent = num;
+
+                        marker.appendChild(circle);
+                        marker.appendChild(text);
+                        layer.appendChild(marker);
+                    }
+
+                    // Jitter (Evitar sobreposição)
+                    const jX = ((num * 17) % 20) - 10;
+                    const jY = ((num * 23) % 20) - 10;
+
+                    marker.style.transition = "transform 0.8s linear";
+                    marker.setAttribute("transform", `translate(${coords.x + jX}, ${coords.y + jY})`);
+                }
             });
 
-            renderMap(cars);
-            renderTable(cars);
-
-        } catch (error) {
-            console.error(error);
-            document.getElementById('conn-status').innerHTML = '<span class="text-danger">● OFFLINE</span>';
+        } catch (e) {
+            console.error(e);
+            document.getElementById('status').innerText = "OFFLINE";
+            document.getElementById('status').className = "fw-bold text-danger";
         }
     }
 
-    function renderMap(cars) {
-        const layer = document.getElementById('cars-layer');
-
-        Object.values(cars).forEach(c => {
-            // Cria ID seguro para HTML (sem espaços)
-            const safeId = 'marker-' + String(c.id).replace(/[^a-zA-Z0-9]/g, '');
-
-            // Busca coordenadas
-            let sensorId = SENSOR_MAP[c.sensor];
-            // Tenta busca parcial se não achar exato
-            if (!sensorId) {
-                const key = Object.keys(SENSOR_MAP).find(k => String(c.sensor).includes(k));
-                if (key) sensorId = SENSOR_MAP[key];
-            }
-
-            // Se não tem sensor, não desenha no mapa, mas continua existindo na tabela
-            if (!sensorId) return;
-
-            const sensorEl = document.getElementById(sensorId);
-            const cx = parseFloat(sensorEl.getAttribute('cx'));
-            const cy = parseFloat(sensorEl.getAttribute('cy'));
-
-            let marker = document.getElementById(safeId);
-
-            // Se o marcador não existe, cria
-            if (!marker) {
-                marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                marker.setAttribute("id", safeId);
-                marker.setAttribute("class", "car-marker");
-
-                const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                dot.setAttribute("class", "car-dot");
-                dot.style.stroke = getTeamColor(c.id);
-                dot.style.fill = "#000";
-
-                const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                label.setAttribute("class", "car-label");
-                // Pega as 3 primeiras letras do nome ou sobrenome
-                let shortName = String(c.id);
-                if (shortName.includes('-')) shortName = shortName.split('-')[1];
-                label.textContent = shortName.substring(0, 3).toUpperCase();
-
-                marker.appendChild(dot);
-                marker.appendChild(label);
-                layer.appendChild(marker);
-            }
-
-            // Jitter (Evita que fiquem um em cima do outro)
-            const hash = String(c.id).length + (c.velocidade || 0);
-            const jitterX = (hash % 15) - 7;
-            const jitterY = (hash % 10) - 5;
-
-            marker.setAttribute("transform", `translate(${cx + jitterX}, ${cy + jitterY})`);
-        });
-    }
-
-    function renderTable(cars) {
-        const tbody = document.getElementById('leaderboard-body');
-        let html = '';
-
-        // Ordena por Voltas -> Velocidade
-        const sorted = Object.values(cars).sort((a, b) => {
-            if (b.volta !== a.volta) return b.volta - a.volta;
-            return b.velocidade - a.velocidade;
-        });
-
-        sorted.forEach(c => {
-            const color = getTeamColor(c.id);
-            let displayName = c.id;
-            if (String(displayName).includes('-')) displayName = displayName.split('-')[1];
-
-            const p = c.pneus;
-
-            html += `
-                <tr>
-                    <td style="border-left: 3px solid ${color}; font-weight:bold; color:${color}">
-                        ${displayName}
-                    </td>
-                    <td class="text-white">${c.volta}</td>
-                    <td class="text-muted">${c.velocidade}</td>
-                    <td style="color:#8b949e; font-size:0.75rem;">${c.sensor}</td>
-                    <td>
-                        <div class="tire-grid mx-auto">
-                            <div class="tire-dot ${getTireClass(p.fl)}" title="FL"></div>
-                            <div class="tire-dot ${getTireClass(p.fr)}" title="FR"></div>
-                            <div class="tire-dot ${getTireClass(p.rl)}" title="RL"></div>
-                            <div class="tire-dot ${getTireClass(p.rr)}" title="RR"></div>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        });
-
-        tbody.innerHTML = html;
-    }
-
-    // Inicia Loop
-    setInterval(updateTelemetry, 1000);
-    updateTelemetry();
-
+    setInterval(update, 1000);
+    update();
 </script>
 </body>
 </html>

@@ -4,17 +4,26 @@ import pymongo
 import os
 import time
 import threading
+import sys
+
+# Força o print aparecer no log do Docker imediatamente
+sys.stdout.reconfigure(line_buffering=True)
 
 MONGO_URI = os.getenv("MONGO_URI")
-BATCH_SIZE = 5  # Lote pequeno pra ver dados mais rápido na tela
+# Batch size reduzido para 1 para garantir que TUDO seja salvo na hora durante o teste
+BATCH_SIZE = 1
+
+print(f"🔧 SSACP INICIANDO... Tentando conectar ao Mongo: {MONGO_URI}")
 
 try:
-    client = pymongo.MongoClient(MONGO_URI)
+    client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     db = client["f1_telemetria"]
     collection = db["logs_corrida"]
-    print("✅ SSACP: Conectado ao Mongo!")
+    # Teste de conexão real
+    client.server_info()
+    print("✅ SSACP: Conectado ao Cluster MongoDB com sucesso!")
 except Exception as e:
-    print(f"❌ Erro Mongo: {e}")
+    print(f"❌ SSACP: ERRO FATAL DE CONEXÃO MONGO: {e}")
 
 
 class TelemetryService(rpyc.Service):
@@ -29,6 +38,9 @@ class TelemetryService(rpyc.Service):
         pass
 
     def exposed_receber_dados(self, dados):
+        # PRINT DE DEBUG: Mostra exatamente o que chegou
+        print(f"📥 RECEBIDO: Carro {dados.get('numero')} | {dados.get('sensor_responsavel')}")
+
         with self.lock:
             self.buffer.append(dados)
             if len(self.buffer) >= BATCH_SIZE:
@@ -37,14 +49,15 @@ class TelemetryService(rpyc.Service):
     def flush(self):
         if not self.buffer: return
         try:
-            collection.insert_many(self.buffer)
-            print(f"💾 Salvo lote de {len(self.buffer)} registros.")
+            # Tenta salvar
+            result = collection.insert_many(self.buffer)
+            print(f"💾 SALVO NO BANCO: {len(result.inserted_ids)} registros.")
             self.buffer = []
         except Exception as e:
-            print(f"Erro save: {e}")
+            print(f"❌ ERRO AO SALVAR NO MONGO: {e}")
 
 
 if __name__ == "__main__":
-    print("🚀 SSACP Rodando...")
+    print("🚀 SSACP Servidor RPC Pronto na porta 50051")
     t = ThreadedServer(TelemetryService, port=50051, protocol_config={'allow_public_attrs': True})
     t.start()
