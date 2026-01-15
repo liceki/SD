@@ -1,24 +1,16 @@
 version: '3.8'
 
 services:
-  mosquitto:
-    image: eclipse-mosquitto
-    ports:
-      - "1883:1883"
-    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
-    volumes:
-      - ./mosquitto.conf:/mosquitto-no-auth.conf
-
-  matchmaker:
-    build: .
-    command: python matchmaker.py
-    depends_on:
-      - mosquitto
-    environment:
-      - BROKER=mosquitto
-
   server:
     build: .
     command: python server.py
     ports:
-      - "18861:18861"
+      - "5000:5000"
+
+  client:
+    build: .
+    command: python client.py
+    environment:
+      - SERVER_HOST=server
+    depends_on:
+      - server
