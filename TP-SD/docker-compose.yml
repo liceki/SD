@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # ------------------------------------------------
+  # CAMADA DE DADOS (BANCO DISTRIBUÍDO - REPLICA SET)
+  # ------------------------------------------------
+  mongo1:
+    image: mongo:latest
+    container_name: f1_mongo1
+    # --replSet rs0 é o segredo para ativar o modo distribuído
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports: ["27017:27017"]
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo2:
+    image: mongo:latest
+    container_name: f1_mongo2
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports: ["27018:27017"]
+
+  mongo3:
+    image: mongo:latest
+    container_name: f1_mongo3
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports: ["27019:27017"]
+
+  # ESTE É O CARA QUE CONFIGURA O CLUSTER AUTOMATICAMENTE
+  mongo-init:
+    image: mongo:latest
+    container_name: f1_mongo_init
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_started
+      mongo3:
+        condition: service_started
+    # O script abaixo espera 5s e roda o rs.initiate() para ligar os 3 nós
+    command: >
+      bash -c "sleep 5 && mongosh --host mongo1:27017 --eval 
+      'try { rs.status().ok } catch { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo1:27017\"}, {_id: 1, host: \"mongo2:27017\"}, {_id: 2, host: \"mongo3:27017\"}]}) }'"
+
+  # ------------------------------------------------
+  # CAMADA DE MENSAGERIA (MQTT)
+  # ------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: f1_broker
+    ports: ["1883:1883", "9001:9001"]
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  # ------------------------------------------------
+  # CAMADA DE APLICAÇÃO (ESCALADA CONFORME REQUISITOS)
+  # ------------------------------------------------
+
+  # SSACP: 3 SERVIDORES (Recebem Objeto via RPC e salvam no Banco Distribuído)
+  ssacp:
+    build: ./ssacp
+    expose: ["50051"]
+    depends_on: [mongo-init] # Só sobe depois que o cluster estiver pronto
+    environment:
+      # Conecta no Cluster rs0
+      - MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0
+    deploy:
+      replicas: 3 # Requisito: 3 SSACP
+
+  # ISCCP: 15 COLETORES (Recebem Evento MQTT e mandam Objeto RPC pro SSACP)
+  isccp:
+    build: ./isccp
+    depends_on: [mosquitto, ssacp]
+    environment:
+      - BROKER_ADDRESS=mosquitto
+      - SSACP_HOST=ssacp
+    deploy:
+      replicas: 15 # Requisito: 15 ISCCP
+
+  # CARROS: 24 CLIENTES (Geram Eventos MQTT)
+  car:
+    build: ./car
+    depends_on: [mosquitto]
+    environment:
+      - BROKER_ADDRESS=mosquitto
+    deploy:
+      replicas: 24 # Requisito: 24 Carros
+
+  # DASHBOARD (Lê do Banco Distribuído)
+  ssvcp:
+    build: ./ssvcp
+    container_name: f1_dashboard
+    ports: ["5000:5000"]
+    depends_on: [mongo-init]
+    environment:
+      # Lê do Cluster rs0
+      - MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0

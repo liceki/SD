@@ -1,87 +1,66 @@
-import sys
-import os
-import json
-import time
-import random
-import threading
 import paho.mqtt.client as mqtt
-import grpc
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from protos import f1_pb2, f1_pb2_grpc
+import rpyc
+import json
+import os
+import time
+import sys
 
 # Configurações
-BROKER = os.getenv("BROKER_ADDRESS", "localhost")
+BROKER = os.getenv("BROKER_ADDRESS", "mosquitto")
+SSACP_HOST = os.getenv("SSACP_HOST", "ssacp")
+SSACP_PORT = 50051
 TOPIC = "f1/pneus"
-GRPC_HOST = os.getenv("GRPC_SERVER", "localhost:50051")
 
-# Buffer de Lote
-buffer_dados = []
-lock = threading.Lock()
-
-# Config gRPC
-channel = grpc.insecure_channel(GRPC_HOST)
-stub = f1_pb2_grpc.MonitoramentoStub(channel)
+rpc_conn = None
 
 
-def on_connect(client, userdata, flags, rc):
-    print(f"[ISCCP] Conectado ao Broker. Aguardando carros...")
+def get_rpc_connection():
+    global rpc_conn
+    try:
+        if rpc_conn is None or rpc_conn.closed:
+            print(f"🔌 ISCCP: Conectando ao SSACP ({SSACP_HOST}:{SSACP_PORT})...")
+            rpc_conn = rpyc.connect(SSACP_HOST, SSACP_PORT, config={'allow_public_attrs': True})
+            print("✅ ISCCP: Link RPC estabelecido!")
+        return rpc_conn
+    except Exception as e:
+        print(f"❌ ISCCP: Falha ao conectar no SSACP: {e}")
+        return None
+
+
+# MQTT Callbacks
+def on_connect(client, userdata, flags, reason_code, properties):
+    print(f"📡 ISCCP: Conectado ao Broker! Ouvindo {TOPIC}...")
     client.subscribe(TOPIC)
 
 
 def on_message(client, userdata, msg):
     try:
+        # 1. Decodifica msg do Carro
         payload = json.loads(msg.payload.decode())
 
-        # --- CORREÇÃO AQUI: ADAPTANDO PARA AS NOVAS CHAVES (fl, fr, rl, rr) ---
-        p_fl = payload['pneus']['fl']
-        p_fr = payload['pneus']['fr']
-        p_rl = payload['pneus']['rl']
-        p_rr = payload['pneus']['rr']
+        # 2. Garante timestamp
+        if 'timestamp' not in payload:
+            payload['timestamp'] = time.time()
 
-        # O carro agora calcula onde ele está (GPS), então usamos isso
-        sensor_atual = payload.get('sensor_responsavel', f"Sensor_Backup_{random.randint(1, 99)}")
-
-        objeto_proto = f1_pb2.DadosCarro(
-            carro_id=payload['carro_id'],
-            sensor_id=sensor_atual,  # Usa o nome do setor da pista (ex: "S do Senna")
-            velocidade=payload['velocidade'],
-            volta=payload['volta'],
-            timestamp=str(payload['timestamp']),
-            pneu_fl=f1_pb2.Pneu(temperatura=p_fl['temperatura'], desgaste=p_fl['desgaste'], pressao=p_fl['pressao']),
-            pneu_fr=f1_pb2.Pneu(temperatura=p_fr['temperatura'], desgaste=p_fr['desgaste'], pressao=p_fr['pressao']),
-            pneu_rl=f1_pb2.Pneu(temperatura=p_rl['temperatura'], desgaste=p_rl['desgaste'], pressao=p_rl['pressao']),
-            pneu_rr=f1_pb2.Pneu(temperatura=p_rr['temperatura'], desgaste=p_rr['desgaste'], pressao=p_rr['pressao']),
-        )
-
-        with lock:
-            buffer_dados.append(objeto_proto)
+        # 3. ENVIA VIA RPC (Objeto) PARA O SSACP
+        conn = get_rpc_connection()
+        if conn:
+            # Chamada Remota de Método
+            conn.root.receber_dados(payload)
+            print(".", end="", flush=True)  # Feedback visual
 
     except Exception as e:
-        # Se der erro de chave, mostra no log para sabermos
-        print(f"[ISCCP] Erro ao ler JSON do carro: {e}")
+        print(f"⚠️ Erro no processamento: {e}")
 
 
-def rotina_envio_periodico():
-    while True:
-        time.sleep(3)  # Envia lote a cada 5 segundos
-        with lock:
-            qtd = len(buffer_dados)
-            if qtd > 0:
-                print(f"[ISCCP] Enviando lote de {qtd} telemetrias...")
-                try:
-                    lote = f1_pb2.ListaDadosCarro(dados=buffer_dados)
-                    stub.EnviarLotePneus(lote)
-                    buffer_dados.clear()
-                    print(f"[ISCCP] Lote enviado com sucesso.")
-                except Exception as e:
-                    print(f"[ISCCP] ERRO gRPC: {e}")
-
-
-# Inicia MQTT
-client = mqtt.Client(client_id=f"ISCCP_Listener_{random.randint(1000, 9999)}")
+# Setup
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ISCCP_Collector")
 client.on_connect = on_connect
 client.on_message = on_message
+
+print("⏳ ISCCP: Iniciando...")
+# Conexão inicial RPC
+get_rpc_connection()
 
 while True:
     try:
@@ -90,10 +69,4 @@ while True:
     except:
         time.sleep(2)
 
-client.loop_start()
-
-print("ISCCP Rodando: Coletando dados da pista...")
-try:
-    rotina_envio_periodico()
-except KeyboardInterrupt:
-    client.loop_stop()
+client.loop_forever()

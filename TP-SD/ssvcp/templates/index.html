@@ -1,144 +1,469 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Monitoramento - GP Interlagos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TELEMETRIA F1 - SISTEMA DISTRIBUÍDO</title>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        body { background-color: #f4f6f9; color: #333; font-family: 'Segoe UI', sans-serif; }
-        .navbar { background-color: #e10600; color: white; }
-
-        /* Cards dos Carros */
-        .car-card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-            border: 1px solid #ddd;
+        /* --- ESTILO GERAL (DARK MODE PROFISSIONAL) --- */
+        body {
+            background-color: #0b0e11;
+            color: #c9d1d9;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden; /* Sem barras de rolagem na janela principal */
         }
-        .car-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.15); }
 
-        .card-header {
-            background-color: #f8f9fa;
-            border-bottom: 1px solid #eee;
-            padding: 10px 15px;
+        /* Grid Layout: Mapa na Esquerda, Tabela na Direita */
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 480px; /* Tabela com largura fixa */
+            grid-template-rows: 60px 1fr;    /* Header fixo, resto flexível */
+            height: 100vh;
+            gap: 15px;
+            padding: 15px;
+        }
+
+        /* --- HEADER --- */
+        .top-bar {
+            grid-column: 1 / -1;
+            background: #161b22;
+            border-bottom: 3px solid #e10600; /* Vermelho F1 */
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* --- PAINEL DO MAPA --- */
+        .map-panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* SVG do Circuito */
+        svg#track-map {
+            width: 95%;
+            height: 95%;
+            filter: drop-shadow(0 0 15px rgba(0,0,0,0.8));
+        }
+
+        /* Traçado da Pista */
+        .track-path {
+            fill: none;
+            stroke: #21262d; /* Cor do asfalto */
+            stroke-width: 28;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .track-border {
+            fill: none;
+            stroke: #8b949e; /* Zebra/Borda */
+            stroke-width: 1;
+            opacity: 0.5;
+        }
+
+        /* Sensores no Mapa */
+        .sensor-point { fill: #30363d; r: 6; }
+        .sensor-text {
+            fill: #8b949e;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            text-anchor: middle;
             font-weight: bold;
-            display: flex; justify-content: space-between; align-items: center;
+            opacity: 0.7;
         }
 
-        /* Pneus */
-        .pneu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; }
-        .pneu-item {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
-            padding: 5px;
-            text-align: center;
+        /* Marcadores dos Carros */
+        .car-marker {
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1); /* Movimento suave */
+            cursor: pointer;
+        }
+        .car-dot {
+            r: 9;
+            stroke: #f0f6fc;
+            stroke-width: 2px;
+            filter: drop-shadow(0 0 6px currentColor); /* Brilho neon na cor do time */
+        }
+        .car-label {
+            fill: #ffffff;
+            font-size: 11px;
+            font-weight: bold;
+            text-anchor: middle;
+            transform: translateY(-14px);
+            text-shadow: 0 2px 4px #000;
+        }
+
+        /* --- PAINEL DE DADOS (TABELA) --- */
+        .data-panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 12px 20px;
+            background: #21262d;
+            font-weight: bold;
+            border-bottom: 1px solid #30363d;
+            color: #e10600;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .scroll-area {
+            flex: 1;
+            overflow-y: auto; /* Scroll apenas na tabela */
+        }
+
+        /* Tabela Estilizada */
+        .telemetry-table {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 0.85rem;
         }
+        .telemetry-table th {
+            text-align: left;
+            padding: 10px;
+            color: #8b949e;
+            border-bottom: 1px solid #30363d;
+            background: #161b22;
+            position: sticky;
+            top: 0;
+            font-size: 0.75rem;
+        }
+        .telemetry-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #21262d;
+            vertical-align: middle;
+        }
+        .telemetry-table tr:hover {
+            background-color: #21262d;
+        }
 
-        /* Indicadores de Status (Bolinhas) */
-        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
-        .bg-ok { background-color: #28a745; }
-        .bg-warn { background-color: #ffc107; }
-        .bg-danger { background-color: #dc3545; animation: blink 1s infinite; }
+        /* --- VISUALIZAÇÃO DOS PNEUS (Quadrados Coloridos) --- */
+        .tire-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px;
+            width: 36px;
+            padding: 2px;
+            background: #0d1117;
+            border-radius: 4px;
+            border: 1px solid #30363d;
+            cursor: help; /* Mostra ? no mouse */
+        }
 
-        @keyframes blink { 50% { opacity: 0.5; } }
+        .tire-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            background-color: #30363d; /* Cor base */
+            transition: background-color 0.3s;
+        }
 
-        .stat-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
-        .stat-val { font-weight: bold; font-size: 1rem; }
+        /* Cores de Estado dos Pneus */
+        .status-ok { background-color: #238636; box-shadow: 0 0 4px #238636; } /* Verde */
+        .status-warn { background-color: #d29922; } /* Amarelo */
+        .status-crit {
+            background-color: #da3633; /* Vermelho */
+            box-shadow: 0 0 8px #da3633;
+            animation: blink-panic 0.6s infinite alternate; /* Pisca */
+        }
+
+        @keyframes blink-panic {
+            from { opacity: 1; }
+            to { opacity: 0.4; }
+        }
+
+        /* Scrollbar customizada (Fica bonito no Chrome) */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0d1117; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
+
     </style>
 </head>
 <body>
-    <nav class="navbar mb-4 shadow-sm">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1"><i class="fas fa-flag-checkered"></i> Monitoramento F1</span>
-            <small id="last-update">Conectando...</small>
-        </div>
-    </nav>
 
-    <div class="container-fluid">
-        <div class="row" id="grid-carros">
-            <div class="col-12 text-center mt-5 text-muted">
-                <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2">Carregando telemetria...</p>
+    <div class="dashboard-container">
+        <div class="top-bar">
+            <div class="d-flex align-items-center gap-3">
+                <h4 class="m-0 fw-bold" style="letter-spacing: -1px;">
+                    <span style="color:#e10600; font-size: 1.2em;">///</span> F1 TELEMETRY <span class="badge bg-dark border border-secondary text-secondary ms-2" style="font-size: 0.5em; vertical-align: middle;">SYS.DIST V1.0</span>
+                </h4>
+            </div>
+            <div class="text-end">
+                <small class="text-muted d-block" style="font-size: 0.7em;">STATUS DA REDE</small>
+                <span id="conn-status" class="text-warning fw-bold" style="font-size: 0.9em;">CONECTANDO...</span>
+            </div>
+        </div>
+
+        <div class="map-panel">
+            <svg id="track-map" viewBox="0 0 800 600">
+                <path class="track-path" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450" />
+                <path class="track-border" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450" />
+
+                <circle id="s-1" cx="150" cy="450" class="sensor-point" /><text x="150" y="475" class="sensor-text">1. S do Senna</text>
+                <circle id="s-2" cx="100" cy="350" class="sensor-point" /><text x="70" y="350" class="sensor-text">2. Saída S</text>
+                <circle id="s-3" cx="200" cy="220" class="sensor-point" /><text x="160" y="220" class="sensor-text">3. Sol</text>
+                <circle id="s-4" cx="300" cy="150" class="sensor-point" /><text x="300" y="135" class="sensor-text">4. Reta Oposta</text>
+                <circle id="s-5" cx="380" cy="180" class="sensor-point" /><text x="435" y="190" class="sensor-text">5. Descida</text>
+                <circle id="s-6" cx="390" cy="120" class="sensor-point" /><text x="390" y="105" class="sensor-text">6. Ferradura</text>
+                <circle id="s-7" cx="450" cy="60" class="sensor-point" /><text x="450" y="45" class="sensor-text">7. Laranjinha</text>
+                <circle id="s-8" cx="550" cy="60" class="sensor-point" /><text x="550" y="45" class="sensor-text">8. Pinheirinho</text>
+                <circle id="s-9" cx="650" cy="60" class="sensor-point" /><text x="650" y="45" class="sensor-text">9. Bico Pato</text>
+                <circle id="s-10" cx="700" cy="150" class="sensor-point" /><text x="745" y="150" class="sensor-text">10. Mergulho</text>
+                <circle id="s-11" cx="650" cy="200" class="sensor-point" /><text x="650" y="225" class="sensor-text">11. Junção</text>
+                <circle id="s-12" cx="680" cy="260" class="sensor-point" /><text x="730" y="260" class="sensor-text">12. Subida</text>
+                <circle id="s-13" cx="720" cy="300" class="sensor-point" /><text x="760" y="305" class="sensor-text">13. Arq A</text>
+                <circle id="s-14" cx="600" cy="380" class="sensor-point" /><text x="600" y="405" class="sensor-text">14. Arq B</text>
+                <circle id="s-15" cx="450" cy="380" class="sensor-point" /><text x="450" y="405" class="sensor-text">15. Principal</text>
+
+                <g id="cars-layer"></g>
+            </svg>
+        </div>
+
+        <div class="data-panel">
+            <div class="panel-header">
+                <span>Leaderboard</span>
+                <span id="total-cars" class="text-white">0 CARS</span>
+            </div>
+            <div class="scroll-area">
+                <table class="telemetry-table">
+                    <thead>
+                        <tr>
+                            <th width="35%">PILOTO</th>
+                            <th width="10%">VOL</th>
+                            <th width="15%">VEL</th>
+                            <th width="25%">SENSOR</th>
+                            <th width="15%" class="text-center">PNEUS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        </tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <script>
-        function getStatusClass(temp, desg) {
-            if (desg > 90 || temp > 125) return 'bg-danger';
-            if (desg > 70 || temp > 115) return 'bg-warn';
-            return 'bg-ok';
+        // Mapeia o nome que vem do Python para o ID do SVG
+        const SENSOR_MAP = {
+            "S do Senna (Entrada)": "s-1", "S do Senna": "s-1",
+            "S do Senna (Saída)": "s-2", "Saída S": "s-2",
+            "Curva do Sol": "s-3",
+            "Reta Oposta": "s-4",
+            "Descida do Lago": "s-5",
+            "Ferradura": "s-6",
+            "Laranjinha": "s-7",
+            "Pinheirinho": "s-8",
+            "Bico de Pato": "s-9",
+            "Mergulho": "s-10",
+            "Junção": "s-11",
+            "Subida dos Boxes": "s-12",
+            "Arquibancadas A": "s-13",
+            "Arquibancadas B": "s-14",
+            "Reta Principal": "s-15"
+        };
+
+        // Cores Oficiais (Aproximadas) das Equipes
+        function getTeamColor(name) {
+            if(!name) return '#ffffff';
+            if(name.includes('RedBull')) return '#3671C6';
+            if(name.includes('Ferrari')) return '#F91536';
+            if(name.includes('Mercedes')) return '#6CD3BF';
+            if(name.includes('McLaren')) return '#F58020';
+            if(name.includes('Aston')) return '#229971';
+            if(name.includes('Alpine')) return '#0093CC';
+            if(name.includes('Williams')) return '#64C4FF';
+            if(name.includes('RB')) return '#6692FF';
+            if(name.includes('Sauber')) return '#52E252';
+            if(name.includes('Haas')) return '#B6BABD';
+            return '#ffffff';
         }
 
-        function renderPneu(nome, p) {
-            const colorClass = getStatusClass(p.temp, p.desgaste);
-            return `
-                <div class="pneu-item">
-                    <div class="d-flex align-items-center justify-content-center mb-1">
-                        <span class="status-dot ${colorClass}"></span> <strong>${nome}</strong>
-                    </div>
-                    <div>${p.temp.toFixed(1)}°C</div>
-                    <div class="text-muted">${p.desgaste.toFixed(1)}%</div>
-                </div>
-            `;
+        // Lógica de Cores dos Pneus
+        function getTireClass(pneu) {
+            if (!pneu) return 'status-ok'; // Padrão Verde
+
+            const d = pneu.desgaste || 0;
+            const t = pneu.temperatura || 0;
+
+            // CRÍTICO (Vermelho Piscando)
+            if (d > 85 || t > 125) return 'status-crit';
+
+            // ALERTA (Amarelo)
+            if (d > 50 || t > 115 || t < 70) return 'status-warn';
+
+            // OK (Verde)
+            return 'status-ok';
         }
 
-        async function update() {
+        async function updateTelemetry() {
             try {
-                const res = await fetch('/api/telemetria');
-                const data = await res.json();
+                const response = await fetch('/api/telemetria');
 
-                // Agrupar por carro (último estado)
-                const carros = {};
-                data.forEach(d => {
-                    if (!carros[d.carro_id]) carros[d.carro_id] = d;
-                });
-
-                const grid = document.getElementById('grid-carros');
-
-                if (Object.keys(carros).length === 0) {
-                    if(grid.innerHTML.includes('spinner')) grid.innerHTML = '<div class="col-12 text-center text-muted">Sem dados.</div>';
-                    return;
+                if (!response.ok) {
+                    throw new Error(`Erro API: ${response.status}`);
                 }
 
-                let html = '';
-                Object.values(carros).sort((a,b) => a.carro_id.localeCompare(b.carro_id)).forEach(c => {
-                    html += `
-                        <div class="col-sm-6 col-md-4 col-xl-3 mb-4">
-                            <div class="car-card">
-                                <div class="card-header">
-                                    <span>${c.carro_id}</span>
-                                    <span class="badge bg-dark">V. ${c.volta}</span>
-                                </div>
-                                <div class="p-3">
-                                    <div class="d-flex justify-content-between mb-3 text-center">
-                                        <div>
-                                            <div class="stat-label">Velocidade</div>
-                                            <div class="stat-val text-primary">${c.velocidade} <small>km/h</small></div>
-                                        </div>
-                                        <div>
-                                            <div class="stat-label">Sensor</div>
-                                            <div class="stat-val text-secondary" style="font-size:0.8rem">${c.sensor_responsavel || '?'}</div>
-                                        </div>
-                                    </div>
-                                    <div class="pneu-grid">
-                                        ${renderPneu('FL', c.pneus.fl)} ${renderPneu('FR', c.pneus.fr)}
-                                        ${renderPneu('RL', c.pneus.rl)} ${renderPneu('RR', c.pneus.rr)}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                const data = await response.json();
+
+                // Atualiza status do header
+                const statusEl = document.getElementById('conn-status');
+                if (data.length > 0) {
+                    statusEl.innerHTML = '<span class="text-success">● ONLINE</span>';
+                    document.getElementById('total-cars').innerText = data.length + " CARROS";
+                } else {
+                    statusEl.innerHTML = '<span class="text-muted">● AGUARDANDO DADOS</span>';
+                }
+
+                // Transforma lista em objeto chaveado por ID (pega sempre o último)
+                const cars = {};
+                data.forEach(d => {
+                    // Se o carro já existe, atualiza somente se o timestamp for mais novo
+                    // (Opcional, pois a API já deve vir ordenada, mas garante integridade)
+                    cars[d.carro_id] = d;
                 });
-                grid.innerHTML = html;
-                document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
-            } catch (e) { console.error(e); }
+
+                renderMap(cars);
+                renderTable(cars);
+
+            } catch (error) {
+                console.error("Falha ao buscar telemetria:", error);
+                document.getElementById('conn-status').innerHTML = '<span class="text-danger">● OFFLINE</span>';
+            }
         }
-        setInterval(update, 1000);
+
+        function renderMap(cars) {
+            const layer = document.getElementById('cars-layer');
+
+            Object.values(cars).forEach(c => {
+                // Cria ID seguro para o DOM (remove espaços e hifens)
+                const safeId = 'car-' + c.carro_id.replace(/[^a-zA-Z0-9]/g, '');
+
+                // Busca coordenadas do sensor
+                let sensorId = SENSOR_MAP[c.sensor_responsavel];
+                // Fallback: se não achar o sensor exato, tenta achar um que contenha o nome
+                if (!sensorId) {
+                    const key = Object.keys(SENSOR_MAP).find(k => c.sensor_responsavel.includes(k));
+                    if(key) sensorId = SENSOR_MAP[key];
+                }
+
+                if (!sensorId) return; // Se ainda não achou, ignora
+
+                const sensorEl = document.getElementById(sensorId);
+                const cx = parseFloat(sensorEl.getAttribute('cx'));
+                const cy = parseFloat(sensorEl.getAttribute('cy'));
+
+                // Verifica se já desenhamos esse carro
+                let marker = document.getElementById(safeId);
+
+                if (!marker) {
+                    // Cria novo marcador
+                    marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    marker.setAttribute("id", safeId);
+                    marker.setAttribute("class", "car-marker");
+
+                    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    dot.setAttribute("class", "car-dot");
+                    dot.style.color = getTeamColor(c.carro_id); // Usado pelo currentColor no CSS
+                    dot.style.fill = getTeamColor(c.carro_id);
+
+                    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    label.setAttribute("class", "car-label");
+                    // Nome Curto: "RedBull-Verstappen" -> "VER"
+                    const shortName = c.carro_id.includes('-') ?
+                                      c.carro_id.split('-')[1].substring(0,3).toUpperCase() :
+                                      c.carro_id.substring(0,3).toUpperCase();
+                    label.textContent = shortName;
+
+                    marker.appendChild(dot);
+                    marker.appendChild(label);
+                    layer.appendChild(marker);
+                }
+
+                // Cálculo de Anti-Aglomeração (Jitter)
+                // Usa o código dos caracteres do nome para gerar uma posição fixa mas espalhada
+                const hashX = c.carro_id.charCodeAt(0) || 0;
+                const hashY = c.carro_id.charCodeAt(c.carro_id.length - 1) || 0;
+
+                // Espalha num raio de ~20px
+                const jitterX = ((hashX % 20) - 10) * 2.5;
+                const jitterY = ((hashY % 20) - 10) * 2.5;
+
+                marker.setAttribute("transform", `translate(${cx + jitterX}, ${cy + jitterY})`);
+            });
+        }
+
+        function renderTable(cars) {
+            const tbody = document.getElementById('leaderboard-body');
+            let html = '';
+
+            // Ordenação: Voltas (Desc) -> Progresso na Pista (aprox) -> Velocidade
+            const sorted = Object.values(cars).sort((a,b) => {
+                if (b.volta !== a.volta) return b.volta - a.volta;
+                return b.velocidade - a.velocidade;
+            });
+
+            sorted.forEach(c => {
+                const color = getTeamColor(c.carro_id);
+                const name = c.carro_id.includes('-') ? c.carro_id.split('-')[1] : c.carro_id;
+                const p = c.pneus || { fl: {}, fr: {}, rl: {}, rr: {} };
+
+                // Texto do Tooltip
+                const tooltip = `
+FL: ${p.fl?.temperatura?.toFixed(0) || 0}°C / ${p.fl?.desgaste?.toFixed(0) || 0}%
+FR: ${p.fr?.temperatura?.toFixed(0) || 0}°C / ${p.fr?.desgaste?.toFixed(0) || 0}%
+RL: ${p.rl?.temperatura?.toFixed(0) || 0}°C / ${p.rl?.desgaste?.toFixed(0) || 0}%
+RR: ${p.rr?.temperatura?.toFixed(0) || 0}°C / ${p.rr?.desgaste?.toFixed(0) || 0}%`.trim();
+
+                html += `
+                    <tr>
+                        <td style="color:${color}; font-weight:bold; border-left: 3px solid ${color};">
+                            ${name}
+                        </td>
+                        <td class="text-white">${c.volta}</td>
+                        <td class="text-muted">${c.velocidade} <span style="font-size:0.7em">km/h</span></td>
+                        <td style="font-size:0.75rem; color:#8b949e;">${c.sensor_responsavel}</td>
+                        <td class="text-center">
+                            <div class="tire-grid mx-auto" title="${tooltip}">
+                                <div class="tire-dot ${getTireClass(p.fl)}"></div>
+                                <div class="tire-dot ${getTireClass(p.fr)}"></div>
+                                <div class="tire-dot ${getTireClass(p.rl)}"></div>
+                                <div class="tire-dot ${getTireClass(p.rr)}"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // Atualiza a cada 500ms para movimento fluido
+        setInterval(updateTelemetry, 500);
+        updateTelemetry();
+
     </script>
 </body>
 </html>

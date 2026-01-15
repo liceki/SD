@@ -1,61 +1,71 @@
-import sys
-import os
-from concurrent import futures
-import grpc
+import rpyc
+from rpyc.utils.server import ThreadedServer
 import pymongo
+import os
+import time
+import threading
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from protos import f1_pb2, f1_pb2_grpc
+# Configurações
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
+BATCH_SIZE = 10  # Salva a cada 10 registros
+FLUSH_INTERVAL = 2 # Ou a cada 2 segundos (o que vier primeiro)
 
+# Conexão Banco
+try:
+    client = pymongo.MongoClient(MONGO_URI)
+    db = client["f1_telemetria"]
+    collection = db["logs_corrida"]
+    print("✅ SSACP: Conectado ao Mongo!")
+except Exception as e:
+    print(f"❌ SSACP: Erro Mongo: {e}")
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-client = pymongo.MongoClient(MONGO_URI)
-db = client["f1_telemetria"]
-collection = db["pneus"]
+class TelemetryService(rpyc.Service):
+    def __init__(self):
+        self.buffer = []
+        self.last_flush = time.time()
+        self.lock = threading.Lock()
+        # Inicia thread de limpeza por tempo
+        t = threading.Thread(target=self._periodic_flush, daemon=True)
+        t.start()
 
+    def on_connect(self, conn):
+        pass
 
-class MonitoramentoService(f1_pb2_grpc.MonitoramentoServicer):
+    def on_disconnect(self, conn):
+        pass
 
-    # Agora implementamos o EnviarLotePneus
-    def EnviarLotePneus(self, request, context):
-        lista_para_salvar = []
+    def exposed_receber_dados(self, dados):
+        """Recebe um objeto (dicionário) do ISCCP"""
+        with self.lock:
+            self.buffer.append(dados)
+            # Se encheu o balde, salva no banco
+            if len(self.buffer) >= BATCH_SIZE:
+                self._flush_to_db()
 
-        # Itera sobre a lista recebida no gRPC (request.dados)
-        for item in request.dados:
-            dados_mongo = {
-                "carro_id": item.carro_id,
-                "sensor_responsavel": item.sensor_id,
-                "velocidade": item.velocidade,
-                "volta": item.volta,
-                "timestamp": item.timestamp,
-                "pneus": {
-                    "fl": {"temp": item.pneu_fl.temperatura, "desgaste": item.pneu_fl.desgaste,
-                           "press": item.pneu_fl.pressao},
-                    "fr": {"temp": item.pneu_fr.temperatura, "desgaste": item.pneu_fr.desgaste,
-                           "press": item.pneu_fr.pressao},
-                    "rl": {"temp": item.pneu_rl.temperatura, "desgaste": item.pneu_rl.desgaste,
-                           "press": item.pneu_rl.pressao},
-                    "rr": {"temp": item.pneu_rr.temperatura, "desgaste": item.pneu_rr.desgaste,
-                           "press": item.pneu_rr.pressao},
-                }
-            }
-            lista_para_salvar.append(dados_mongo)
+    def _flush_to_db(self):
+        if not self.buffer:
+            return
 
-        if lista_para_salvar:
-            collection.insert_many(lista_para_salvar)
-            print(f"[SACP] Lote recebido com {len(lista_para_salvar)} registros. Salvo no DB.")
+        try:
+            # BULK INSERT (O segredo da performance)
+            collection.insert_many(self.buffer)
+            print(f"BATCH SAVE: {len(self.buffer)} registros salvos.")
+            self.buffer = [] # Limpa balde
+            self.last_flush = time.time()
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar batch: {e}")
 
-        return f1_pb2.Resposta(mensagem="Lote Processado", sucesso=True)
+    def _periodic_flush(self):
+        """Garante que dados não fiquem presos se o batch não encher"""
+        while True:
+            time.sleep(1)
+            with self.lock:
+                if self.buffer and (time.time() - self.last_flush > FLUSH_INTERVAL):
+                    print("⏰ Time Flush...")
+                    self._flush_to_db()
 
-
-def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    f1_pb2_grpc.add_MonitoramentoServicer_to_server(MonitoramentoService(), server)
-    server.add_insecure_port('[::]:50051')
-    print("Servidor SACP (Modo Lote) rodando na porta 50051...")
-    server.start()
-    server.wait_for_termination()
-
-
-if __name__ == '__main__':
-    serve()
+if __name__ == "__main__":
+    # Inicia Servidor RPC na porta 18861 (Padrão RPyC)
+    print("SSACP (Aggregator) rodando na porta 50051...")
+    t = ThreadedServer(TelemetryService, port=50051, protocol_config={'allow_public_attrs': True})
+    t.start()
