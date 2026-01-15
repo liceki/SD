@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  game_server:
+    build: .
+    command: python server.py
+    ports:
+      - "18861:18861"
+    volumes:
+      - .:/app
