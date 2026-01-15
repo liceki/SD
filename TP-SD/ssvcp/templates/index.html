@@ -2,74 +2,92 @@
 <html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>F1 MONITOR - SISTEMA DISTRIBUÍDO</title>
+    <title>F1 MONITOR - 2025</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #0b0e11; color: #c9d1d9; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; margin: 0; }
+        body { background-color: #0b0e11; color: #c9d1d9; font-family: 'Roboto Mono', monospace; overflow: hidden; height: 100vh; margin: 0; }
+        .dashboard-container { display: grid; grid-template-columns: 1fr 580px; grid-template-rows: 60px 1fr; height: 100vh; gap: 5px; padding: 5px; }
+        .top-bar { grid-column: 1 / -1; background: #161b22; border-bottom: 3px solid #e10600; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; }
 
-        /* Layout Grid */
-        .dashboard-container { display: grid; grid-template-columns: 1fr 500px; grid-template-rows: 60px 1fr; height: 100vh; gap: 10px; padding: 10px; }
-
-        /* Topo */
-        .top-bar { grid-column: 1 / -1; background: #161b22; border-bottom: 2px solid #e10600; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-
-        /* Mapa */
-        .map-panel { background: #161b22; border: 1px solid #30363d; position: relative; display: flex; justify-content: center; align-items: center; }
-
-        /* Tabela */
-        .data-panel { background: #161b22; border: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+        .map-panel, .data-panel { background: #161b22; border: 1px solid #30363d; border-radius: 4px; overflow: hidden; position: relative; }
+        .map-panel { display: flex; justify-content: center; align-items: center; }
+        .data-panel { display: flex; flex-direction: column; }
         .scroll-area { flex: 1; overflow-y: auto; }
 
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        thead th { background: #21262d; position: sticky; top: 0; padding: 10px; text-align: left; border-bottom: 2px solid #30363d; z-index: 10; }
-        tbody td { padding: 6px 10px; border-bottom: 1px solid #30363d; vertical-align: middle; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th { background: #21262d; position: sticky; top: 0; padding: 8px; text-align: left; color: #8b949e; z-index: 10; font-size: 0.7rem; text-transform: uppercase; }
+        td { padding: 4px 8px; border-bottom: 1px solid #252a31; vertical-align: middle; }
+        tr:nth-child(even) { background-color: #0d1117; }
 
-        /* Estilo dos Sensores no Mapa */
-        .sensor-point { fill: #ffffff; stroke: #000; stroke-width: 1px; }
-        .sensor-text { fill: #8b949e; font-size: 9px; font-weight: bold; font-family: Arial, sans-serif; pointer-events: none; }
+        /* Pneus e Modal */
+        .tire-container { position: relative; display: inline-block; }
+        .tire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 34px; margin: 0 auto; cursor: help; }
+        .tire-box { width: 16px; height: 16px; border-radius: 2px; border: 1px solid #000; transition: background 0.3s; }
 
-        /* Grid de Pneus na Tabela */
-        .tire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 40px; }
-        .tire-box {
-            width: 18px; height: 18px; border-radius: 2px; border: 1px solid #000;
-            cursor: help; transition: background-color 0.3s;
+        /* Modal Flutuante */
+        .tire-tooltip {
+            visibility: hidden;
+            width: 180px;
+            background-color: #161b22;
+            color: #fff;
+            border: 1px solid #e10600;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 999;
+            top: 50%;
+            right: 110%;
+            transform: translateY(-50%);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.9);
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 0.75rem;
+            pointer-events: none;
         }
+        .tire-container:hover .tire-tooltip { visibility: visible; opacity: 1; }
 
-        /* Cores de Status */
-        .status-ok { background-color: #238636; } /* Verde */
-        .status-warn { background-color: #d29922; } /* Amarelo */
-        .status-crit { background-color: #da3633; animation: blink 1s infinite; } /* Vermelho */
+        .status-fresh { background-color: #00ff00; box-shadow: 0 0 5px #00ff00; }
+        .status-ok { background-color: #238636; }
+        .status-warn { background-color: #d29922; }
+        .status-crit { background-color: #da3633; animation: blink 0.3s infinite alternate; }
+        @keyframes blink { to { opacity: 0.5; } }
 
-        @keyframes blink { 50% { opacity: 0.5; } }
+        .sensor-point { fill: #333; stroke: #666; stroke-width: 1; }
+        .sensor-label { fill: #666; font-size: 8px; font-family: Arial; font-weight: bold; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div class="dashboard-container">
     <div class="top-bar">
-        <h4><span style="color:#e10600;">///</span> F1 MONITOR <span class="badge bg-secondary" style="font-size: 0.5em">OFFICIAL TIMING</span></h4>
-        <div id="status" class="fw-bold text-warning">CONECTANDO...</div>
+        <h3 class="m-0 fw-bold"><span style="color:#e10600">///</span> LIVE TIMING</h3>
+        <div class="text-end">
+            <div id="clock" class="text-white fw-bold">00:00:00</div>
+            <div id="status" class="text-warning" style="font-size: 0.7em;">CONECTANDO...</div>
+        </div>
     </div>
 
     <div class="map-panel">
-        <svg id="track-map" viewBox="0 0 800 600" style="width:95%; height:95%;">
-            <path fill="none" stroke="#21262d" stroke-width="40" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
-            <path fill="none" stroke="#444" stroke-width="2" stroke-dasharray="5,5" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
+        <svg id="track-map" viewBox="0 0 800 600" style="width:98%; height:98%;">
+            <path fill="none" stroke="#21262d" stroke-width="45" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
+            <path fill="none" stroke="#444" stroke-width="2" stroke-dasharray="10,5" d="M 150 450 C 100 450 50 400 100 350 L 250 150 C 280 120 320 120 350 150 L 380 180 C 400 200 420 180 410 160 L 390 120 C 380 90 410 60 450 60 L 650 60 C 700 60 750 100 700 150 L 650 200 C 620 230 650 260 680 260 L 720 260 C 750 260 750 300 720 300 L 450 320 C 400 330 400 380 450 380 L 600 380 C 650 380 680 420 650 450 L 500 550 C 450 580 200 480 150 450"/>
 
             <g id="sensors-layer">
-                <g transform="translate(150, 450)"><circle r="4" class="sensor-point"/><text x="-10" y="15" class="sensor-text">S Senna</text></g>
-                <g transform="translate(100, 350)"><circle r="4" class="sensor-point"/><text x="-25" y="0" class="sensor-text">Saída S</text></g>
-                <g transform="translate(300, 150)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Reta Oposta</text></g>
-                <g transform="translate(380, 180)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Descida</text></g>
-                <g transform="translate(390, 120)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Ferradura</text></g>
-                <g transform="translate(450, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Laranjinha</text></g>
-                <g transform="translate(550, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Pinheirinho</text></g>
-                <g transform="translate(650, 60)"><circle r="4" class="sensor-point"/><text x="-10" y="-10" class="sensor-text">Bico Pato</text></g>
-                <g transform="translate(700, 150)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Mergulho</text></g>
-                <g transform="translate(650, 200)"><circle r="4" class="sensor-point"/><text x="-30" y="5" class="sensor-text">Junção</text></g>
-                <g transform="translate(680, 260)"><circle r="4" class="sensor-point"/><text x="10" y="5" class="sensor-text">Subida</text></g>
-                <g transform="translate(450, 380)"><circle r="4" class="sensor-point"/><text x="-10" y="15" class="sensor-text">Reta Principal</text></g>
+                <g transform="translate(150, 450)"><circle r="3" class="sensor-point"/><text x="-20" y="15" class="sensor-label">S SENNA IN</text></g>
+                <g transform="translate(200, 220)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">CURVA SOL</text></g>
+                <g transform="translate(300, 150)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">RETA OPOSTA</text></g>
+                <g transform="translate(380, 180)"><circle r="3" class="sensor-point"/><text x="10" y="5" class="sensor-label">DESCIDA</text></g>
+                <g transform="translate(390, 120)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">FERRADURA</text></g>
+                <g transform="translate(450, 60)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">LARANJINHA</text></g>
+                <g transform="translate(550, 60)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">PINHEIRINHO</text></g>
+                <g transform="translate(650, 60)"><circle r="3" class="sensor-point"/><text x="-10" y="-10" class="sensor-label">BICO PATO</text></g>
+                <g transform="translate(700, 150)"><circle r="3" class="sensor-point"/><text x="10" y="5" class="sensor-label">MERGULHO</text></g>
+                <g transform="translate(650, 200)"><circle r="3" class="sensor-point"/><text x="-30" y="5" class="sensor-label">JUNÇÃO</text></g>
+                <g transform="translate(680, 260)"><circle r="3" class="sensor-point"/><text x="10" y="5" class="sensor-label">SUBIDA</text></g>
+                <g transform="translate(720, 300)"><circle r="3" class="sensor-point"/><text x="10" y="0" class="sensor-label">ARQ A</text></g>
+                <g transform="translate(585, 310)"><circle r="3" class="sensor-point"/><text x="-10" y="15" class="sensor-label">ARQ B</text></g>
+                <g transform="translate(550, 480)"><circle r="3" class="sensor-point"/><text x="10" y="5" class="sensor-label">RETA PRINCIPAL</text></g>
+                <g transform="translate(300, 520)"><circle r="3" class="sensor-point"/><text x="-10" y="15" class="sensor-label">CHEGADA</text></g>
             </g>
 
             <g id="cars-layer"></g>
@@ -77,18 +95,17 @@
     </div>
 
     <div class="data-panel">
-        <div class="p-2 fw-bold border-bottom border-secondary text-white d-flex justify-content-between">
-            <span>LEADERBOARD</span>
-            <span style="font-size:0.8em; color:#888;">(Passe o mouse nos pneus para ver dados)</span>
-        </div>
         <div class="scroll-area">
             <table>
                 <thead>
                     <tr>
-                        <th width="5%">#</th> <th width="35%">PILOTO</th>
-                        <th width="25%">SENSOR</th>
-                        <th width="15%">VEL</th>
-                        <th width="20%" class="text-center">PNEUS</th> </tr>
+                        <th class="text-center">P</th>
+                        <th class="text-center">#</th>
+                        <th>PILOTO / EQUIPE</th>
+                        <th>SETOR</th>
+                        <th>VOLTA</th>
+                        <th class="text-center">PNEUS (D/T)</th>
+                    </tr>
                 </thead>
                 <tbody id="table-body"></tbody>
             </table>
@@ -97,133 +114,154 @@
 </div>
 
 <script>
-    // Configurações
-    const SENSOR_COORDS = {
-        "S do Senna": {x: 150, y: 450}, "Saída S": {x: 100, y: 350},
-        "Reta Oposta": {x: 300, y: 150}, "Descida do Lago": {x: 380, y: 180},
-        "Ferradura": {x: 390, y: 120}, "Laranjinha": {x: 450, y: 60},
-        "Pinheirinho": {x: 550, y: 60}, "Bico de Pato": {x: 650, y: 60},
-        "Mergulho": {x: 700, y: 150}, "Junção": {x: 650, y: 200},
-        "Subida Boxes": {x: 680, y: 260}, "Reta Principal": {x: 450, y: 380}
+    // LISTA ATUALIZADA (SEM SENNA OUT)
+    const TRACK_ORDER = [
+        "Reta Principal", "Linha de Chegada", "S do Senna (Entrada)", "Curva do Sol",
+        "Reta Oposta", "Descida do Lago", "Ferradura", "Laranjinha",
+        "Pinheirinho", "Bico de Pato", "Mergulho", "Junção",
+        "Subida dos Boxes", "Arquibancada A", "Arquibancada B"
+    ];
+
+    const COORDS = {
+        "S do Senna (Entrada)": {x: 150, y: 450},
+        // Senna Out removido
+        "Curva do Sol": {x: 200, y: 220},
+        "Reta Oposta": {x: 300, y: 150},
+        "Descida do Lago": {x: 380, y: 180},
+        "Ferradura": {x: 390, y: 120},
+        "Laranjinha": {x: 450, y: 60},
+        "Pinheirinho": {x: 550, y: 60},
+        "Bico de Pato": {x: 650, y: 60},
+        "Mergulho": {x: 700, y: 150},
+        "Junção": {x: 650, y: 200},
+        "Subida dos Boxes": {x: 680, y: 260},
+        "Arquibancada A": {x: 720, y: 300},
+        "Arquibancada B": {x: 585, y: 310},
+        "Reta Principal": {x: 550, y: 480},
+        "Linha de Chegada": {x: 300, y: 520}
     };
 
     function getColor(team) {
-        if(team.includes("Red")) return "#3671C6";
-        if(team.includes("Ferr")) return "#F91536";
-        if(team.includes("Merc")) return "#6CD3BF";
-        if(team.includes("McL")) return "#F58020";
-        if(team.includes("Ast")) return "#229971";
-        if(team.includes("Alp")) return "#0093CC";
-        if(team.includes("Will")) return "#64C4FF";
+        if(team.includes("Merc")) return "#00D2BE";
+        if(team.includes("Red")) return "#0600EF";
+        if(team.includes("Ferr")) return "#FF0000";
+        if(team.includes("McL")) return "#FF8700";
+        if(team.includes("Ast")) return "#006F62";
+        if(team.includes("Alp")) return "#0090FF";
+        if(team.includes("Will")) return "#005AFF";
         if(team.includes("RB")) return "#6692FF";
-        if(team.includes("Sau")) return "#52E252";
+        if(team.includes("Audi")) return "#FFFFFF";
         if(team.includes("Haas")) return "#B6BABD";
+        if(team.includes("Por")) return "#AAAAAA";
+        if(team.includes("Lot")) return "#FFD700";
         return "#fff";
     }
 
-    // Lógica de Cor do Pneu
-    function getTireStatus(tire) {
-        if (!tire) return 'status-ok';
-        const t = tire.temperatura || 0;
-        const d = tire.desgaste || 0;
-
-        // Critérios (Exemplo)
-        if (t > 115 || d > 80) return 'status-crit'; // Vermelho
-        if (t > 105 || d > 50) return 'status-warn'; // Amarelo
-        return 'status-ok'; // Verde
+    function getTireClass(d) {
+        if (d > 80) return 'status-crit';
+        if (d > 50) return 'status-warn';
+        if (d > 15) return 'status-ok';
+        return 'status-fresh';
     }
 
     async function update() {
         try {
             const res = await fetch('/api/telemetria');
-            if (!res.ok) throw new Error("Erro API");
-            const data = await res.json();
+            if(!res.ok) throw new Error("API Error");
+            let data = await res.json();
 
-            document.getElementById('status').innerText = data.length + " CARROS - LIVE";
-            document.getElementById('status').className = "fw-bold text-success";
+            document.getElementById('status').innerText = data.length + " ONLINE";
 
-            const layer = document.getElementById('cars-layer');
+            data.sort((a, b) => {
+                const voltaA = a.volta || 0;
+                const voltaB = b.volta || 0;
+                if (voltaA !== voltaB) return voltaB - voltaA;
+                const sensorA = TRACK_ORDER.indexOf(a.sensor_responsavel);
+                const sensorB = TRACK_ORDER.indexOf(b.sensor_responsavel);
+                return sensorB - sensorA;
+            });
+
             const tbody = document.getElementById('table-body');
+            const layer = document.getElementById('cars-layer');
             tbody.innerHTML = '';
 
-            data.forEach(d => {
-                const id = d.carro_id || "Desconhecido";
-                const num = d.numero || "?";
+            data.forEach((d, index) => {
+                const id = d.carro_id || "UNK";
+                const parts = id.split('-');
+                const team = parts[0] || "?";
+                const driver = parts[1] || id;
+                const num = d.numero || "0";
                 const sensor = d.sensor_responsavel || "Reta Principal";
-                const teamColor = getColor(id);
-                const pneus = d.pneus || {};
+                const color = getColor(team);
+                const p = d.pneus || {fl:{desgaste:0, temperatura:0}, fr:{}, rl:{}, rr:{}};
 
-                // Renderiza Tabela com PNEUS
-                const pneuCell = `
-                    <div class="tire-grid mx-auto">
-                        <div class="tire-box ${getTireStatus(pneus.fl)}" title="FL | Temp: ${pneus.fl?.temperatura?.toFixed(1)}°C | Desg: ${pneus.fl?.desgaste?.toFixed(1)}%"></div>
-                        <div class="tire-box ${getTireStatus(pneus.fr)}" title="FR | Temp: ${pneus.fr?.temperatura?.toFixed(1)}°C | Desg: ${pneus.fr?.desgaste?.toFixed(1)}%"></div>
-                        <div class="tire-box ${getTireStatus(pneus.rl)}" title="RL | Temp: ${pneus.rl?.temperatura?.toFixed(1)}°C | Desg: ${pneus.rl?.desgaste?.toFixed(1)}%"></div>
-                        <div class="tire-box ${getTireStatus(pneus.rr)}" title="RR | Temp: ${pneus.rr?.temperatura?.toFixed(1)}°C | Desg: ${pneus.rr?.desgaste?.toFixed(1)}%"></div>
+                const tooltipHTML = `
+                    <div class="tire-tooltip">
+                        <div class="fw-bold border-bottom mb-1 pb-1 text-center text-warning">${driver}</div>
+                        <div class="d-flex justify-content-between"><span>FL:</span> <span class="${getTireClass(p.fl.desgaste)} px-1 text-dark fw-bold rounded">${p.fl.desgaste?.toFixed(0)}%</span> <span>${p.fl.temperatura?.toFixed(0)}°</span></div>
+                        <div class="d-flex justify-content-between mt-1"><span>FR:</span> <span class="${getTireClass(p.fr.desgaste)} px-1 text-dark fw-bold rounded">${p.fr.desgaste?.toFixed(0)}%</span> <span>${p.fr.temperatura?.toFixed(0)}°</span></div>
+                        <div class="d-flex justify-content-between mt-1"><span>RL:</span> <span class="${getTireClass(p.rl.desgaste)} px-1 text-dark fw-bold rounded">${p.rl.desgaste?.toFixed(0)}%</span> <span>${p.rl.temperatura?.toFixed(0)}°</span></div>
+                        <div class="d-flex justify-content-between mt-1"><span>RR:</span> <span class="${getTireClass(p.rr.desgaste)} px-1 text-dark fw-bold rounded">${p.rr.desgaste?.toFixed(0)}%</span> <span>${p.rr.temperatura?.toFixed(0)}°</span></div>
                     </div>
                 `;
 
-                tbody.innerHTML += `<tr>
-                    <td class="fw-bold text-white text-center">${num}</td>
-                    <td style="color:${teamColor}; border-left: 3px solid ${teamColor}">${id}</td>
-                    <td style="font-size: 0.8em; color: #aaa;">${sensor}</td>
-                    <td>${d.velocidade}</td>
-                    <td>${pneuCell}</td>
-                </tr>`;
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="text-center fw-bold text-muted">${index + 1}</td>
+                        <td class="text-center text-white">${num}</td>
+                        <td style="border-left: 3px solid ${color}">
+                            <span class="fw-bold text-white">${driver.toUpperCase()}</span><br>
+                            <span style="font-size:0.7em; color:#888">${team.toUpperCase()}</span>
+                        </td>
+                        <td style="color:#aaa; font-size:0.75rem">${sensor}</td>
+                        <td class="text-white fw-bold">${d.volta}</td>
+                        <td>
+                            <div class="tire-container">
+                                <div class="tire-grid">
+                                    <div class="tire-box ${getTireClass(p.fl.desgaste)}"></div>
+                                    <div class="tire-box ${getTireClass(p.fr.desgaste)}"></div>
+                                    <div class="tire-box ${getTireClass(p.rl.desgaste)}"></div>
+                                    <div class="tire-box ${getTireClass(p.rr.desgaste)}"></div>
+                                </div>
+                                ${tooltipHTML}
+                            </div>
+                        </td>
+                    </tr>
+                `;
 
-                // Renderiza Mapa
-                // Tenta achar coordenadas (Exata ou Parcial)
-                let coords = SENSOR_COORDS[sensor];
-                if (!coords) {
-                    const key = Object.keys(SENSOR_COORDS).find(k => sensor.includes(k));
-                    if (key) coords = SENSOR_COORDS[key];
+                let coords = COORDS[sensor];
+                if(!coords) {
+                     const k = Object.keys(COORDS).find(key => sensor.includes(key));
+                     if(k) coords = COORDS[k];
                 }
 
-                if (coords) {
-                    const markerId = 'marker-' + num;
-                    let marker = document.getElementById(markerId);
-
-                    if (!marker) {
-                        marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                        marker.setAttribute("id", markerId);
-
-                        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                        circle.setAttribute("r", "8");
-                        circle.setAttribute("fill", teamColor);
-                        circle.setAttribute("stroke", "#fff");
-                        circle.setAttribute("stroke-width", "1");
-
-                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                        text.setAttribute("y", "3");
-                        text.setAttribute("text-anchor", "middle");
-                        text.setAttribute("fill", "#000");
-                        text.setAttribute("font-size", "9");
-                        text.setAttribute("font-weight", "bold");
-                        text.textContent = num;
-
-                        marker.appendChild(circle);
-                        marker.appendChild(text);
-                        layer.appendChild(marker);
+                if(coords) {
+                    const mId = 'm-' + num;
+                    let m = document.getElementById(mId);
+                    if(!m) {
+                        m = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                        m.setAttribute("id", mId);
+                        m.innerHTML = `<circle r="9" fill="${color}" stroke="#fff" stroke-width="1"></circle>
+                                       <text y="3" text-anchor="middle" font-size="9" font-weight="bold" fill="#000">${num}</text>`;
+                        layer.appendChild(m);
                     }
 
-                    // Jitter (Evitar sobreposição)
-                    const jX = ((num * 17) % 20) - 10;
-                    const jY = ((num * 23) % 20) - 10;
+                    const jx = ((num * 13) % 10) - 5;
+                    const jy = ((num * 7) % 10) - 5;
 
-                    marker.style.transition = "transform 0.8s linear";
-                    marker.setAttribute("transform", `translate(${coords.x + jX}, ${coords.y + jY})`);
+                    m.style.transition = "transform 2.5s linear";
+                    m.setAttribute("transform", `translate(${coords.x + jx}, ${coords.y + jy})`);
                 }
             });
 
-        } catch (e) {
-            console.error(e);
-            document.getElementById('status').innerText = "OFFLINE";
-            document.getElementById('status').className = "fw-bold text-danger";
-        }
+        } catch(e) { console.error(e); }
     }
 
-    setInterval(update, 1000);
-    update();
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toLocaleTimeString();
+        update();
+    }, 500);
 </script>
 </body>
 </html>
