@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Atividade 2 - Interface</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-5">
+    <div class="container card p-4 shadow">
+        <h2 class="text-center mb-4">Gerenciador de Pessoas (NoSQL)</h2>
+
+        <div class="row g-2 mb-4">
+            <div class="col-md-5"><input id="nome" class="form-control" placeholder="Nome"></div>
+            <div class="col-md-5"><input id="email" class="form-control" placeholder="Email"></div>
+            <div class="col-md-2"><button onclick="salvar()" class="btn btn-success w-100">Adicionar</button></div>
+        </div>
+
+        <table class="table table-hover">
+            <thead><tr><th>Nome</th><th>Email</th><th class="text-end">Ações</th></tr></thead>
+            <tbody id="tabela"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const API = '/';
+
+        async function listar() {
+            const res = await fetch(API);
+            const dados = await res.json();
+            const tab = document.getElementById('tabela');
+            tab.innerHTML = '';
+
+            if(Array.isArray(dados)){
+                dados.forEach(p => {
+                    tab.innerHTML += `
+                        <tr>
+                            <td>${p.name}</td>
+                            <td>${p.email}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-warning" onclick="editar('${p.name}')">Editar</button>
+                                <button class="btn btn-sm btn-danger" onclick="apagar('${p.email}')">Excluir</button>
+                            </td>
+                        </tr>`;
+                });
+            }
+        }
+
+        async function salvar() {
+            const name = document.getElementById('nome').value;
+            const email = document.getElementById('email').value;
+
+            // Validação simples
+            if (!name || !email) {
+                alert("Preencha nome e email!");
+                return;
+            }
+
+            const res = await fetch(API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, email})
+            });
+
+            if(res.ok) {
+                document.getElementById('nome').value = '';
+                document.getElementById('email').value = '';
+                listar();
+            } else {
+                const erro = await res.json();
+                alert("Erro: " + (erro.error || "Falha ao salvar"));
+            }
+        }
+
+        async function editar(nome) {
+            // AQUI ESTAVA O ERRO
+            // A variável que entra na função chama "nome"
+            const email = prompt("Novo email para " + nome + ":");
+
+            if(email) {
+                await fetch(API, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: nome, email: email})
+                });
+                listar();
+            }
+        }
+
+        async function apagar(name) {
+            if(confirm("Deletar " + name + "?")) {
+                await fetch(API, {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: name})
+                });
+                listar();
+            }
+        }
+        listar();
+    </script>
+</body>
+</html>

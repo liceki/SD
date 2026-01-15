@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  mongo_atv2:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+
+  web_atv2:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo_atv2:27017/
+    depends_on:
+      - mongo_atv2
+    volumes:
+      - .:/app
